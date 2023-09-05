@@ -32,6 +32,14 @@ jobs:
   build-release:
     needs: ['create-release']
     runs-on: ${{ matrix.os }}
+    env:
+      CARGO: cargo
+      # When CARGO is set to CROSS, this is set to `--target matrix.target`.
+      TARGET_FLAGS: ""
+      # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
+      TARGET_DIR: ./target
+      # Emit backtraces on panics.
+      RUST_BACKTRACE: 1
 
     strategy:
       matrix:
@@ -62,9 +70,21 @@ jobs:
         with:
           targets: ${{ matrix.target }}
           toolchain: ${{ matrix.rust }}
+      - name: Use Cross
+        shell: bash
+        run: |
+          cargo install cross
+          echo "CARGO=cross" >> $GITHUB_ENV
+          echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
+          echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
+      - name: Show command used for Cargo
+        run: |
+          echo "cargo command is: ${{ env.CARGO }}"
+          echo "target flag is: ${{ env.TARGET_FLAGS }}"
+          echo "target dir is: ${{ env.TARGET_DIR }}"
 
       - name: Build binary
-        run: cargo build --release --verbose --target ${{ matrix.target }}
+        run: ${{ env.CARGO }} build --release --verbose --target ${{ matrix.target }}
 
       - name: Build archive
         shell: bash
