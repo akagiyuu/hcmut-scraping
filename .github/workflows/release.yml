@@ -40,18 +40,18 @@ jobs:
             os: ubuntu-latest
             rust: nightly
             target: x86_64-unknown-linux-musl
-          - build: win-msvc
-            os: windows-latest
-            rust: nightly
-            target: x86_64-pc-windows-msvc
-          - build: win-gnu
-            os: windows-latest
-            rust: nightly-x86_64-gnu
-            target: x86_64-pc-windows-gnu
-          - build: win32-msvc
-            os: windows-latest
-            rust: nightly
-            target: i686-pc-windows-msvc
+          # - build: win-msvc
+          #   os: windows-latest
+          #   rust: nightly
+          #   target: x86_64-pc-windows-msvc
+          # - build: win-gnu
+          #   os: windows-latest
+          #   rust: nightly-x86_64-gnu
+          #   target: x86_64-pc-windows-gnu
+          # - build: win32-msvc
+          #   os: windows-latest
+          #   rust: nightly
+          #   target: i686-pc-windows-msvc
 
     steps:
       - name: Install rust
@@ -61,7 +61,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
 
       - name: Build binary
-        run: cargo build --release --verbose ${{ matrix.target }}
+        run: cargo build --release --verbose --target ${{ matrix.target }}
 
       - name: Build archive
         shell: bash
