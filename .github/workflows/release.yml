@@ -65,11 +65,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Install packages (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if ! command -V sudo; then
+            apt-get update
+            apt-get install -y --no-install-recommends sudo
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoctor \
+            zsh xz-utils liblz4-tool musl-tools \
+            brotli zstd
+
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
         with:
           targets: ${{ matrix.target }}
           toolchain: ${{ matrix.rust }}
+
       - name: Use Cross
         shell: bash
         run: |
@@ -90,7 +104,7 @@ jobs:
         shell: bash
         run: |
           binary_name = "hcmut_scraping"
-          staging = "$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
+          dirname = "$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
 
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
