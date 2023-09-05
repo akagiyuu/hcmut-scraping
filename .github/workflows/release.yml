@@ -1,18 +1,3 @@
-# The way this works is the following:
-#
-# The create-release job runs purely to initialize the GitHub release itself
-# and to output upload_url for the following job.
-#
-# The build-release job runs only once create-release is finished. It gets the
-# release upload URL from create-release job outputs, then builds the release
-# executables for each supported platform and attaches them as release assets
-# to the previously created release.
-#
-# The key here is that we create the release only once.
-#
-# Reference:
-# https://eugene-babichenko.github.io/blog/2020/05/09/github-actions-cross-platform-auto-releases/
-
 name: release
 on:
   push:
@@ -26,198 +11,108 @@ permissions:
   contents: write
 
 jobs:
-  # create-release:
-  #   name: create-release
-  #   runs-on: ubuntu-latest
-  #   # env:
-  #     # Set to force version number, e.g., when no tag exists.
-  #     # VERSION: TEST-0.0.0
-  #   outputs:
-  #     VERSION: ${{ env.VERSION }}
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #     - name: Get the release version from the tag
-  #       shell: bash
-  #       if: env.VERSION == ''
-  #       run: |
-  #         echo "VERSION=$GITHUB_REF_NAME" >> $GITHUB_ENV
-  #         echo "version is: ${{ env.VERSION }}"
-  #     - name: Create GitHub release
-  #       env:
-  #         GH_TOKEN: ${{ github.token }}
-  #       run: gh release create ${{ env.VERSION }}
-  build:
-    name: ${{ matrix.platform.os_name }} with rust ${{ matrix.toolchain }}
-    runs-on: ${{ matrix.platform.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - os_name: Linux-aarch64
-            os: ubuntu-20.04
-            target: aarch64-unknown-linux-musl
-            bin: figctl-linux-arm64
-          - os_name: Linux-x86_64
-            os: ubuntu-20.04
-            target: x86_64-unknown-linux-gnu
-            bin: figctl-linux-amd64
-          - os_name: Windows-x86_64
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            bin: figctl-amd64.exe
-          - os_name: macOS-x86_64
-            os: macOS-latest
-            target: x86_64-apple-darwin
-            bin: figctl-darwin-amd64
-          - os_name: macOS-aarch64
-            os: macOS-latest
-            target: aarch64-apple-darwin
-            bin: figctl-darwin-arm64
-        toolchain:
-          - nightly
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ env.VERSION }}
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Get release
+        shell: bash
+        if: env.VERSION == ''
+        run: |
+          echo "VERSION=$GITHUB_REF_NAME" >> $GITHUB_ENV
+          echo "version is: ${{ env.VERSION }}"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ env.VERSION }}
+
+  build-release:
+    needs: ['create-release']
+    runs-on: ${{ matrix.os }}
+    env:
+      CARGO: cargo
+      # When CARGO is set to CROSS, this is set to `--target matrix.target`.
+      TARGET_FLAGS: ""
+      # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
+      TARGET_DIR: ./target
+      # Emit backtraces on panics.
+      RUST_BACKTRACE: 1
+
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            rust: nightly
+            target: x86_64-unknown-linux-gnu
+          - build: win-msvc
+            os: windows-latest
+            rust: nightly
+            target: x86_64-pc-windows-msvc
+          - build: win-gnu
+            os: windows-latest
+            rust: nightly-x86_64-gnu
+            target: x86_64-pc-windows-gnu
+          - build: win32-msvc
+            os: windows-latest
+            rust: nightly
+            target: i686-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Install packages (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if ! command -V sudo; then
+            apt-get update
+            apt-get install -y --no-install-recommends sudo
+          fi
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            asciidoctor \
+            zsh xz-utils liblz4-tool musl-tools \
+            brotli zstd \
+            libssl-dev
+
+      - name: Install rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          targets: ${{ matrix.target }}
+          toolchain: ${{ matrix.rust }}
+
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v0
         with:
           command: "build"
-          target: ${{ matrix.platform.target }}
-          toolchain: ${{ matrix.toolchain }}
+          target: ${{ matrix.target }}
+          toolchain: ${{ matrix.rust }}
           args: "--locked --release"
           strip: true
-      - name: Rename binary (linux and macos)
-        run: mv target/${{ matrix.platform.target }}/release/figctl target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-        if: matrix.platform.os_name != 'Windows-x86_64'
-      - name: Rename binary (windows)
-        run: mv target/${{ matrix.platform.target }}/release/figctl.exe target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-        if: matrix.platform.os_name == 'Windows-x86_64'
-      - name: Generate SHA-256
-        run: shasum -a 256 target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }} | cut -d ' ' -f 1 > target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
-      - name: Release binary and SHA-256 checksum to GitHub
+
+      - name: Build archive
+        shell: bash
+        run: |
+          binary_name = "hcmut_scraping"
+          dirname = "$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+          else
+            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          fi
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a "$dirname.zip" "$dirname"
+            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
+          else
+            tar -czf "$dirname.tar.gz" "$dirname"
+            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+          fi
+      - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}
-            target/${{ matrix.platform.target }}/release/${{ matrix.platform.bin }}.sha256
-
-  # build-release:
-  #   name: build-release
-  #   needs: ['create-release']
-  #   runs-on: ${{ matrix.os }}
-  #   env:
-  #     # For some builds, we use cross to test on 32-bit and big-endian
-  #     # systems.
-  #     CARGO: cargo
-  #     # When CARGO is set to CROSS, this is set to `--target matrix.target`.
-  #     TARGET_FLAGS: ""
-  #     # When CARGO is set to CROSS, TARGET_DIR includes matrix.target.
-  #     TARGET_DIR: ./target
-  #     # Emit backtraces on panics.
-  #     RUST_BACKTRACE: 1
-  #   strategy:
-  #     matrix:
-  #       build: [linux, linux-arm, win-msvc, win-gnu, win32-msvc]
-  #       include:
-  #       - build: linux
-  #         os: ubuntu-latest
-  #         rust: nightly
-  #         target: x86_64-unknown-linux-musl
-  #       - build: linux-arm
-  #         os: ubuntu-latest
-  #         rust: nightly
-  #         target: arm-unknown-linux-gnueabihf
-  #       - build: win-msvc
-  #         os: windows-latest
-  #         rust: nightly
-  #         target: x86_64-pc-windows-msvc
-  #       - build: win-gnu
-  #         os: windows-latest
-  #         rust: nightly-x86_64-gnu
-  #         target: x86_64-pc-windows-gnu
-  #       - build: win32-msvc
-  #         os: windows-latest
-  #         rust: nightly
-  #         target: i686-pc-windows-msvc
-
-  #   steps:
-  #   - name: Checkout repository
-  #     uses: actions/checkout@v3
-
-  #   - name: Install packages (Ubuntu)
-  #     if: matrix.os == 'ubuntu-latest'
-  #     run: |
-  #       ci/ubuntu-install-packages
-
-  #   - name: Install packages (macOS)
-  #     if: matrix.os == 'macos-latest'
-  #     run: |
-  #       ci/macos-install-packages
-
-  #   - name: Install Rust
-  #     uses: dtolnay/rust-toolchain@master
-  #     with:
-  #       toolchain: ${{ matrix.rust }}
-  #       target: ${{ matrix.target }}
-
-  #   - name: Use Cross
-  #     shell: bash
-  #     run: |
-  #       cargo install cross
-  #       echo "CARGO=cross" >> $GITHUB_ENV
-  #       echo "TARGET_FLAGS=--target ${{ matrix.target }}" >> $GITHUB_ENV
-  #       echo "TARGET_DIR=./target/${{ matrix.target }}" >> $GITHUB_ENV
-
-  #   - name: Show command used for Cargo
-  #     run: |
-  #       echo "cargo command is: ${{ env.CARGO }}"
-  #       echo "target flag is: ${{ env.TARGET_FLAGS }}"
-  #       echo "target dir is: ${{ env.TARGET_DIR }}"
-
-  #   - name: Build release binary
-  #     run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
-
-  #   - name: Strip release binary (linux, macos and macos-arm)
-  #     if: matrix.build == 'linux'
-  #     run: strip "target/${{ matrix.target }}/release/rg"
-
-  #   - name: Strip release binary (arm)
-  #     if: matrix.build == 'linux-arm'
-  #     run: |
-  #       docker run --rm -v \
-  #         "$PWD/target:/target:Z" \
-  #         rustembedded/cross:arm-unknown-linux-gnueabihf \
-  #         arm-linux-gnueabihf-strip \
-  #         /target/arm-unknown-linux-gnueabihf/release/rg
-
-  #   - name: Build archive
-  #     shell: bash
-  #     run: |
-  #       outdir="$(ci/cargo-out-dir "${{ env.TARGET_DIR }}")"
-  #       staging="ripgrep-${{ needs.create-release.outputs.VERSION }}-${{ matrix.target }}"
-  #       mkdir -p "$staging"/{complete,doc}
-
-  #       cp {README.md,COPYING,UNLICENSE,LICENSE-MIT} "$staging/"
-  #       cp {CHANGELOG.md,FAQ.md,GUIDE.md} "$staging/doc/"
-  #       cp "$outdir"/{rg.bash,rg.fish,_rg.ps1} "$staging/complete/"
-  #       cp complete/_rg "$staging/complete/"
-
-  #       if [ "${{ matrix.os }}" = "windows-latest" ]; then
-  #         cp "target/${{ matrix.target }}/release/rg.exe" "$staging/"
-  #         7z a "$staging.zip" "$staging"
-  #         certutil -hashfile "$staging.zip" SHA256 > "$staging.zip.sha256"
-  #         echo "ASSET=$staging.zip" >> $GITHUB_ENV
-  #         echo "ASSET_SUM=$staging.zip.sha256" >> $GITHUB_ENV
-  #       else
-  #         # The man page is only generated on Unix systems. ¯\_(ツ)_/¯
-  #         cp "$outdir"/rg.1 "$staging/doc/"
-  #         cp "target/${{ matrix.target }}/release/rg" "$staging/"
-  #         tar czf "$staging.tar.gz" "$staging"
-  #         shasum -a 256 "$staging.tar.gz" > "$staging.tar.gz.sha256"
-  #         echo "ASSET=$staging.tar.gz" >> $GITHUB_ENV
-  #         echo "ASSET_SUM=$staging.tar.gz.sha256" >> $GITHUB_ENV
-  #       fi
-
-  #   - name: Upload release archive
-  #     env:
-  #       GH_TOKEN: ${{ github.token }}
-  #     run: gh release upload ${{ needs.create-release.outputs.VERSION }} ${{ env.ASSET }} ${{ env.ASSET_SUM }}
+          files: ${{ env.ASSET }}
