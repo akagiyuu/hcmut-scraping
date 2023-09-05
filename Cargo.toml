@@ -1,0 +1,17 @@
+[package]
+name = "hcmut_scraping"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+mongodb = { version = "2.6.1", features = ["tokio-sync"] }
+notify-rust = "4.9.0"
+rand = "0.8.5"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
+scraper = "0.17.1"
+serde = { version = "1.0.188", features = ["derive"] }
+similar = "2.2.1"
+tokio = { version = "1", features = ["full"] }
