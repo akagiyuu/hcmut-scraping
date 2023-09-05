@@ -21,6 +21,10 @@ on:
     # - ag/work
     tags:
     - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: write
+
 jobs:
   create-release:
     name: create-release
@@ -120,7 +124,7 @@ jobs:
       run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
 
     - name: Strip release binary (linux, macos and macos-arm)
-      if: matrix.build == 'linux'
+      if: matrix.build == 'linuxr
       run: strip "target/${{ matrix.target }}/release/rg"
 
     - name: Strip release binary (arm)
