@@ -76,8 +76,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             asciidoctor \
             zsh xz-utils liblz4-tool musl-tools \
-            brotli zstd \
-            libssl-dev
+            brotli zstd
 
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
@@ -97,8 +96,8 @@ jobs:
       - name: Build archive
         shell: bash
         run: |
-          binary_name = "hcmut_scraping"
-          dirname = "$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
+          binary_name="hcmut_scraping"
+          dirname="$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
 
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
