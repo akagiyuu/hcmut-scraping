@@ -53,10 +53,6 @@ jobs:
             os: windows-latest
             rust: nightly-x86_64-gnu
             target: x86_64-pc-windows-gnu
-          - build: win32-msvc
-            os: windows-latest
-            rust: nightly
-            target: i686-pc-windows-msvc
 
     steps:
       - name: Checkout
@@ -95,17 +91,15 @@ jobs:
         run: |
           binary_name="hcmut_scraping"
           dirname="$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
-
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            binary_location="target/${{ matrix.target }}/release/$binary_name.exe"
-          else
-            binary_location="target/${{ matrix.target }}/release/$binary_name"
+            binary_name="hcmut_scraping.exe"
           fi
+          mv "target/${{ matrix.target }}/release/$binary_name" $binary_name
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a "$dirname.zip" "$binary_location"
+            7z a "$dirname.zip" "$binary_name"
             echo "ASSET=$dirname.zip" >> $GITHUB_ENV
           else
-            tar -czf "$dirname.tar.gz" "$binary_location"
+            tar -czf "$dirname.tar.gz" "$binary_name"
             echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
           fi
       - name: Release
