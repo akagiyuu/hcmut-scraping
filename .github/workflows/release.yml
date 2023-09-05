@@ -124,7 +124,7 @@ jobs:
       run: ${{ env.CARGO }} build --verbose --release ${{ env.TARGET_FLAGS }}
 
     - name: Strip release binary (linux, macos and macos-arm)
-      if: matrix.build == 'linuxr
+      if: matrix.build == 'linux'
       run: strip "target/${{ matrix.target }}/release/rg"
 
     - name: Strip release binary (arm)
