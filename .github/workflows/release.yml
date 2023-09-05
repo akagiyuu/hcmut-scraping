@@ -54,11 +54,6 @@ jobs:
             target: i686-pc-windows-msvc
 
     steps:
-      - name: Install packages (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          ci/ubuntu-install-packages
-
       - name: Install rust
         uses: dtolnay/rust-toolchain@master
         with:
