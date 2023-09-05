@@ -1,9 +1,6 @@
 name: release
 on:
   push:
-    # Enable when testing release infrastructure on a branch.
-    # branches:
-    # - ag/work
     tags:
     - "[0-9]+.[0-9]+.[0-9]+"
 
@@ -100,15 +97,15 @@ jobs:
           dirname="$binary_name-${{ needs.create-release.outputs.version}}-${{ matrix.target }}"
 
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+            binary_location="target/${{ matrix.target }}/release/$binary_name.exe"
           else
-            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+            binary_location="target/${{ matrix.target }}/release/$binary_name"
           fi
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            7z a "$dirname.zip" "$dirname"
+            7z a "$dirname.zip" "$binary_location"
             echo "ASSET=$dirname.zip" >> $GITHUB_ENV
           else
-            tar -czf "$dirname.tar.gz" "$dirname"
+            tar -czf "$dirname.tar.gz" "$binary_location"
             echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
           fi
       - name: Release

@@ -7,5 +7,5 @@ use std::time::Duration;
 use anyhow::Result;
 
 fn main() -> Result<!> {
-    news::sync_start(Duration::from_secs(60))?;
+    news::sync_start(Duration::from_secs(3600))?;
 }

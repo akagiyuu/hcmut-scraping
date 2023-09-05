@@ -3,8 +3,6 @@ use anyhow::Result;
 use mongodb::bson::doc;
 use mongodb::sync::Client;
 use notify_rust::Notification;
-use rand::distributions::Alphanumeric;
-use rand::Rng;
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
@@ -27,16 +25,16 @@ fn get_announcements() -> Result<Vec<String>> {
     let selector = LINK_SELECTOR.get_or_init(|| Selector::parse("article > div:nth-child(1) > div:nth-child(2) > header:nth-child(1) > h2:nth-child(1) > a:nth-child(1)").unwrap());
 
     let mut announcements = Vec::with_capacity(NEWS_PER_PAGE);
-    let test: String = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .map(char::from)
-        .take(5)
-        .collect();
-    announcements.push(test);
     for el in html.select(selector) {
-        announcements.push(el.value().attr("href").unwrap().to_string());
+        let text = el
+            .first_child()
+            .unwrap()
+            .value()
+            .as_text()
+            .unwrap()
+            .to_string();
+        announcements.push(text);
     }
-    announcements.pop();
     Ok(announcements)
 }
 
@@ -55,20 +53,19 @@ pub fn sync_start(duration_between_sync: Duration) -> Result<!> {
             let old_announcements = news.announcements;
 
             let changes = diff(new_announcements.as_slice(), old_announcements.as_slice());
-            if changes.is_empty() {
+            if !changes.is_empty() {
+                let mut buffer = String::new();
+                for change in changes {
+                    writeln!(buffer, "- {}", change.value())?;
+                }
+                Notification::new()
+                    .summary("Announcements change")
+                    .body(&buffer)
+                    .timeout(0)
+                    .show()?;
+            } else {
                 println!("No updates");
-                continue;
             }
-
-            let mut buffer = String::new();
-            for change in changes {
-                writeln!(buffer, "{} {}", change.tag(), change.value())?;
-            }
-            Notification::new()
-                .summary("Announcements change")
-                .body(&buffer)
-                .timeout(0)
-                .show()?;
         }
 
         collection.replace_one(
